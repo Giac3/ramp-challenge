@@ -6,17 +6,56 @@ import { useEmployees } from "./hooks/useEmployees"
 import { usePaginatedTransactions } from "./hooks/usePaginatedTransactions"
 import { useTransactionsByEmployee } from "./hooks/useTransactionsByEmployee"
 import { EMPTY_EMPLOYEE } from "./utils/constants"
-import { Employee } from "./utils/types"
+import { Employee, Transaction } from "./utils/types"
 
 export function App() {
   const { data: employees, ...employeeUtils } = useEmployees()
   const { data: paginatedTransactions, ...paginatedTransactionsUtils } = usePaginatedTransactions()
   const { data: transactionsByEmployee, ...transactionsByEmployeeUtils } = useTransactionsByEmployee()
   const [isLoading, setIsLoading] = useState(false)
-
+  const [prevTransactions, setPrevTransactions] = useState<Transaction[] | null>()
   const transactions = useMemo(
-    () => paginatedTransactions?.data ?? transactionsByEmployee ?? null,
-    [paginatedTransactions, transactionsByEmployee]
+    () => { 
+      if (paginatedTransactions?.data && transactionsByEmployee){
+        let arr = transactionsByEmployee.concat(paginatedTransactions.data)
+        
+        const uniqueIds: string[] = [];
+
+        const uniqueTransactions = arr.filter(element => {
+          const isDuplicate = uniqueIds.includes(element.id);
+
+          if (!isDuplicate) {
+            uniqueIds.push(element.id);
+            return true;
+          }
+          return false;
+
+        });
+        return uniqueTransactions
+
+      }
+      
+      if(paginatedTransactions?.data && !transactionsByEmployee && prevTransactions) {
+        let arr = prevTransactions.concat(paginatedTransactions.data)
+        
+        const uniqueIds: string[] = [];
+
+        const uniqueTransactions: Transaction[] = arr.filter((element: Transaction) => {
+          const isDuplicate = uniqueIds.includes(element.id);
+
+          if (!isDuplicate) {
+            uniqueIds.push(element.id);
+            return true;
+          }
+          return false;
+
+        });
+        return uniqueTransactions
+      }
+      setPrevTransactions(paginatedTransactions?.data ?? transactionsByEmployee ?? null)
+      return paginatedTransactions?.data ?? transactionsByEmployee ?? null
+    },
+    [paginatedTransactions, transactionsByEmployee, prevTransactions]
   )
 
   const loadAllTransactions = useCallback(async () => {
@@ -24,15 +63,21 @@ export function App() {
     transactionsByEmployeeUtils.invalidateData()
 
     await employeeUtils.fetchAll()
+    setIsLoading(false)
+    await paginatedTransactionsUtils.fetchAll()
+  }, [employeeUtils, paginatedTransactionsUtils, transactionsByEmployeeUtils])
+
+  const loadMoreTransactions = useCallback(async () => {
+
     await paginatedTransactionsUtils.fetchAll()
 
-    setIsLoading(false)
-  }, [employeeUtils, paginatedTransactionsUtils, transactionsByEmployeeUtils])
+  }, [paginatedTransactionsUtils])
 
   const loadTransactionsByEmployee = useCallback(
     async (employeeId: string) => {
       paginatedTransactionsUtils.invalidateData()
       await transactionsByEmployeeUtils.fetchById(employeeId)
+      setPrevTransactions(null)
     },
     [paginatedTransactionsUtils, transactionsByEmployeeUtils]
   )
@@ -61,7 +106,6 @@ export function App() {
             label: `${item.firstName} ${item.lastName}`,
           })}
           onChange={async (newValue) => {
-            console.log(newValue)
             if (newValue === null) {
               return
             }
@@ -84,7 +128,7 @@ export function App() {
               className="RampButton"
               disabled={paginatedTransactionsUtils.loading}
               onClick={async () => {
-                await loadAllTransactions()
+                await loadMoreTransactions()
               }}
             >
               View More
