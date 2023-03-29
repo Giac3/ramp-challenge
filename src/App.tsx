@@ -13,46 +13,17 @@ export function App() {
   const { data: paginatedTransactions, ...paginatedTransactionsUtils } = usePaginatedTransactions()
   const { data: transactionsByEmployee, ...transactionsByEmployeeUtils } = useTransactionsByEmployee()
   const [isLoading, setIsLoading] = useState(false)
+  const [viewMoreVisible, setViewMoreVisible] = useState(false)
   const [prevTransactions, setPrevTransactions] = useState<Transaction[] | null>()
   const transactions = useMemo(
     () => { 
-      if (paginatedTransactions?.data && transactionsByEmployee){
-        let arr = transactionsByEmployee.concat(paginatedTransactions.data)
-        
-        const uniqueIds: string[] = [];
-
-        const uniqueTransactions = arr.filter(element => {
-          const isDuplicate = uniqueIds.includes(element.id);
-
-          if (!isDuplicate) {
-            uniqueIds.push(element.id);
-            return true;
-          }
-          return false;
-
-        });
-        return uniqueTransactions
-
+      if(!paginatedTransactions?.nextPage) {
+        setViewMoreVisible(false)
+      }
+      if(prevTransactions! && paginatedTransactions!){
+        return prevTransactions.concat(paginatedTransactions.data)
       }
       
-      if(paginatedTransactions?.data && !transactionsByEmployee && prevTransactions) {
-        let arr = prevTransactions.concat(paginatedTransactions.data)
-        
-        const uniqueIds: string[] = [];
-
-        const uniqueTransactions: Transaction[] = arr.filter((element: Transaction) => {
-          const isDuplicate = uniqueIds.includes(element.id);
-
-          if (!isDuplicate) {
-            uniqueIds.push(element.id);
-            return true;
-          }
-          return false;
-
-        });
-        return uniqueTransactions
-      }
-      setPrevTransactions(paginatedTransactions?.data ?? transactionsByEmployee ?? null)
       return paginatedTransactions?.data ?? transactionsByEmployee ?? null
     },
     [paginatedTransactions, transactionsByEmployee, prevTransactions]
@@ -65,19 +36,21 @@ export function App() {
     await employeeUtils.fetchAll()
     setIsLoading(false)
     await paginatedTransactionsUtils.fetchAll()
+    setViewMoreVisible(true)
   }, [employeeUtils, paginatedTransactionsUtils, transactionsByEmployeeUtils])
 
   const loadMoreTransactions = useCallback(async () => {
 
     await paginatedTransactionsUtils.fetchAll()
+    setPrevTransactions(transactions)
 
-  }, [paginatedTransactionsUtils])
+  }, [paginatedTransactionsUtils, transactions])
 
   const loadTransactionsByEmployee = useCallback(
     async (employeeId: string) => {
       paginatedTransactionsUtils.invalidateData()
-      await transactionsByEmployeeUtils.fetchById(employeeId)
       setPrevTransactions(null)
+      await transactionsByEmployeeUtils.fetchById(employeeId)
     },
     [paginatedTransactionsUtils, transactionsByEmployeeUtils]
   )
@@ -112,8 +85,10 @@ export function App() {
 
             if (newValue.id === ""){
               await loadAllTransactions() 
+              setViewMoreVisible(true)
               return
             }
+            setViewMoreVisible(false)
             await loadTransactionsByEmployee(newValue.id)
           }}
         />
@@ -123,7 +98,7 @@ export function App() {
         <div className="RampGrid">
           <Transactions transactions={transactions} />
 
-          {transactions !== null && (
+          {transactions !== null && viewMoreVisible && (
             <button
               className="RampButton"
               disabled={paginatedTransactionsUtils.loading}
